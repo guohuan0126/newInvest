@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- ch.qos.logback.core.ConsoleAppender 控制台输出 -->
+    <appender name="console" class="ch.qos.logback.core.ConsoleAppender">
+        <withJansi>true</withJansi>
+        <encoder>
+            <pattern>[%thread] %d{HH:mm:ss.SSS} %highlight(%-5level) %cyan(%logger{36}) - %msg %n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- ch.qos.logback.core.rolling.RollingFileAppender 文件日志输出 -->
+    <appender name="file" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <File>/srv/dem03/soa-iPlan/iplan-service.log</File>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <FileNamePattern>/srv/dem03/soa-iPlan/iplan-service-%d{yyyy-MM-dd}-%i.log
+            </FileNamePattern>
+            <MaxHistory>100</MaxHistory>
+            <TimeBasedFileNamingAndTriggeringPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedFNATP">
+                <MaxFileSize>50MB</MaxFileSize>
+            </TimeBasedFileNamingAndTriggeringPolicy>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] [%-5level] %logger{36} - %msg%n
+            </pattern>
+        </encoder>
+    </appender>
+
+    <!--<springProfile name="!product">
+        &lt;!&ndash; 非生产环境：可以开启部分debug日志 &ndash;&gt;
+    </springProfile>-->
+    <logger name="com.jiuyi.ndr.dao" level="DEBUG"/>
+
+    <!-- root level：info 不可修改！ -->
+    <root level="info">
+        <appender-ref ref="file"/>
+        <appender-ref ref="console"/>
+    </root>
+</configuration>
