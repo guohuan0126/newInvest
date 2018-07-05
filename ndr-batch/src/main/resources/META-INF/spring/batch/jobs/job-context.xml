@@ -1,0 +1,678 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:batch="http://www.springframework.org/schema/batch"
+       xmlns:context="http://www.springframework.org/schema/context"
+       xmlns:task="http://www.springframework.org/schema/task" xmlns:bean="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/batch http://www.springframework.org/schema/batch/spring-batch.xsd
+	http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd
+	http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context.xsd
+    http://www.springframework.org/schema/task
+    http://www.springframework.org/schema/task/spring-task.xsd http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util.xsd">
+
+    <context:annotation-config/>
+
+
+    <bean id="jobStatusListener" class="com.jiuyi.ndr.batch.JobStatusListener">
+        <property name="alarm" value="on" />
+        <property name="mobiles" value="17326986656,18801442723,15136456879" />
+        <property name="emails" value="guohuan@duanrong.com,liulina@duanrong.com,mayongbo@duanrong.com" />
+    </bean>
+
+    <bean id="jobRegistryBeanPostProcessor" class="org.springframework.batch.core.configuration.support.JobRegistryBeanPostProcessor">
+        <property name="jobRegistry" ref="jobRegistry" />
+    </bean>
+
+    <!--多线程配置-->
+    <bean id="taskExecutor" class="org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor">
+        <property name="corePoolSize" value="10" />
+        <property name="maxPoolSize" value="30" />
+    </bean>
+
+    <!--月月盈匹配-->
+    <bean id="iPlanAutoInvestTasklet" class="com.jiuyi.ndr.batch.iplan.IPlanAutoInvestTasklet" scope="step"/>
+    <!--一键投匹配-->
+    <bean id="newIPlanAutoMatchTasklet" class="com.jiuyi.ndr.batch.iplan.NewIPlanAutoMatchTasklet" scope="step"/>
+
+    <!--债权合同-->
+    <bean id="loanCreditContractTasklet" class="com.jiuyi.ndr.batch.contract.LoanCreditContractTasklet" scope="step"/>
+
+    <!--省心投预约投资-->
+    <bean id="newIplanAutoInvestReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.marketing.MarketingIplanAppointRecordDao.findByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{1}"/> <!--查询募集完成的-->
+            </map>
+        </property>
+    </bean>
+    <bean id="newIplanAutoInvestWriter" class="com.jiuyi.ndr.batch.iplan.NewIplanAutoInvestWriter" scope="step"/>
+    <!--月月盈募满放款-->
+    <bean id="iPlanRaisedFinishReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanDao.findByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{3}"/> <!--查询募集完成的-->
+            </map>
+        </property>
+    </bean>
+    <bean id="iPlanRaisedFinishWriter" class="com.jiuyi.ndr.batch.iplan.IPlanRaisedFinishWriter" scope="step"/>
+    <!--标的放款借款人提现-->
+    <bean id="subjectWithdrawReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectDao.findByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{1}"/> <!--查询未提现的和提现失败的-->
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectWithdrawWriter" class="com.jiuyi.ndr.batch.subject.SubjectWithdrawWriter" scope="step"/>
+
+    <!--月月盈还息-->
+    <bean id="iPlanRepayReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanRepayDetailDao.findShouldRepay" />
+        <property name="parameterValues">
+            <map>
+                <entry key="dueDate" value="#{new com.jiuyi.ndr.util.DateUtil().getCurrentDate()}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="iPlanRepayWriter" class="com.jiuyi.ndr.batch.iplan.IPlanRepayWriter" scope="step"/>
+
+    <!--月月盈到期退出-->
+    <bean id="iPlanExitReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="1000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanRepayScheduleDao.findShouldExit" />
+        <property name="parameterValues">
+            <map>
+                <entry key="dueDate" value="#{new com.jiuyi.ndr.util.DateUtil().getCurrentDate()}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="iPlanExitWriter" class="com.jiuyi.ndr.batch.iplan.IPlanExitWriter" scope="step"/>
+
+    <!--分页读取所有某日应还款但未还款的还款计划-->
+    <bean id="unpaidRepayScheduleReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader"
+          scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findOverdueRepaySchedules" />
+        <property name="parameterValues">
+            <map>
+                <entry key="date" value="#{new com.jiuyi.ndr.util.DateUtil().getCurrentDateShort()}"/>
+            </map>
+        </property>
+    </bean>
+
+    <!--标的逾期状态设置writer-->
+    <bean id="subjectOverdueMarkWriter" class="com.jiuyi.ndr.batch.subject.SubjectOverdueMarkWriter"/>
+
+    <!--分页读取所有逾期还款计划-->
+    <bean id="overdueRepayScheduleReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="100"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findByStatusOrderBySubjectId" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{2}"/>
+            </map>
+        </property>
+    </bean>
+    <!--标的逾期罚息累计writer-->
+    <bean id="subjectOverduePenaltyWriter" class="com.jiuyi.ndr.batch.subject.SubjectOverduePenaltyWriter"/>
+
+    <!--债权匹配-本地处理-->
+    <bean id="creditCreateReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectTransLogDao.findByTypAndExtStatus" />
+    </bean>
+    <bean id="creditCreateWriter" class="com.jiuyi.ndr.batch.credit.CreditCreateWriter" scope="step"/>
+
+    <!--债权放款-存管交易处理-->
+    <bean id="creditLoanReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.credit.CreditDao.findLoanCredit" />
+    </bean>
+    <bean id="creditLoanWriter" class="com.jiuyi.ndr.batch.credit.CreditLoanWriter" scope="step"/>
+
+    <!--债权放款-本地交易处理-->
+    <bean id="creditLocalLoanReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.credit.CreditDao.findLoanLocalCredit" />
+    </bean>
+    <bean id="creditLocalLoanWriter" class="com.jiuyi.ndr.batch.credit.CreditLocalHandleWriter" scope="step"/>
+
+    <!--定期转出处理-->
+    <bean id="iPlanTransLogExitReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanTransLogDao.findNeedExit" />
+    </bean>
+    <bean id="iPlanTransLogExitWriter" class="com.jiuyi.ndr.batch.iplan.IPlanTransLogExitWriter" scope="step"/>
+
+    <!--散标转出处理-->
+    <bean id="subjectTranslLogExitReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectTransLogDao.findNeedExit" />
+    </bean>
+    <bean id="subjectTransLogExitWriter" class="com.jiuyi.ndr.batch.subject.SubjectTransLogExitWriter" scope="step"/>
+
+    <!--一键投转出处理-->
+    <bean id="iPlanTransLogCreditTransferExitReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanTransLogDao.findYjtNeedExit" />
+    </bean>
+    <bean id="iPlanTransLogCreditTransferExitWriter" class="com.jiuyi.ndr.batch.iplan.IPlanTransLogCreditTransferExitWriter" scope="step"/>
+
+    <!--标的放款-->
+    <bean id="subjectLendReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectDao.findCouldLend" />
+    </bean>
+    <bean id="subjectLendWriter" class="com.jiuyi.ndr.batch.subject.SubjectLendWriter" scope="step"/>
+
+    <!--直贷二期还款文件处理-->
+    <bean id="subjectRepayBillHandleReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayBillDao.selectByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{0}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayBillHandleWriter" class="com.jiuyi.ndr.batch.subject.SubjectRepayBillHandleWriter" scope="step"/>
+
+    <!--直贷二期标的还款打标记-->
+    <bean id="subjectRepayDirect2MarkReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayBillDao.selectByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{1}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayDirect2MarkWriter" class="com.jiuyi.ndr.batch.subject.SubjectRepayDirect2MarkWriter" scope="step"/>
+
+    <!--标的还款直贷一期-->
+    <bean id="subjectRepayStep0Reader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findByDueDateAndIsRepayAndStatusAndDirectFlag" />
+        <property name="parameterValues">
+            <map>
+                <entry key="dueDate" value="#{new com.jiuyi.ndr.util.DateUtil().getCurrentDateShort()}"/>
+                <entry key="isRepay" value="#{0}"/>
+                <entry key="status" value="#{0}"/>
+                <entry key="directFlag" value="#{2}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayStep0Writer" class="com.jiuyi.ndr.batch.subject.SubjectRepayStep0Writer" scope="step"/>
+
+    <bean id="subjectRepayReaderStep1" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayDetailDao.findByStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{0}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayWriterStep1" class="com.jiuyi.ndr.batch.subject.SubjectRepayWriterStep1" scope="step"/>
+
+    <bean id="subjectRepayDirect2OverdueAutoTasklet" class="com.jiuyi.ndr.batch.subject.SubjectRepayDirect2OverdueAutoTasklet" scope="step"/>
+
+
+    <bean id="subjectRepayReaderStep2" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayDetailDao.findByStatusAndCurrentStep" />
+        <property name="parameterValues">
+            <map>
+                <entry key="status" value="#{1}"/>
+                <entry key="currentStep" value="#{1}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayWriterStep2" class="com.jiuyi.ndr.batch.subject.SubjectRepayWriterStep2" scope="step"/>
+
+    <!--生成借款人还款流水 由writer变成tasklet-->
+    <bean id="subjectRepayDetailStep3Tasklet" class="com.jiuyi.ndr.batch.subject.SubjectRepayDetailStep3Tasklet" scope="step"/>
+
+    <!--还款冻结-本地处理-生成还款明细-->
+    <bean id="subjectRepayStep1Reader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findByIsRepay" />
+        <property name="parameterValues">
+            <map>
+                <entry key="isRepay" value="#{1}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayStep1Writer" class="com.jiuyi.ndr.batch.subject.SubjectRepayStep1Writer" scope="step"/>
+
+    <bean id="subjectRepayStep2Reader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findByIsRepayAndCurrentStep" />
+        <property name="parameterValues">
+            <map>
+                <entry key="isRepay" value="#{2}"/>
+                <entry key="currentStep" value="#{'repay'}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayStep2Writer" class="com.jiuyi.ndr.batch.subject.SubjectRepayStep2Writer" scope="step"/>
+
+    <bean id="subjectRepayStep3Reader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectRepayScheduleDao.findByIsRepayAndCurrentStep" />
+        <property name="parameterValues">
+            <map>
+                <entry key="isRepay" value="#{3}"/>
+                <entry key="currentStep" value="#{'repay'}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayStep3Writer" class="com.jiuyi.ndr.batch.subject.SubjectRepayStep3Writer" scope="step"/>
+
+    <bean id="subjectRepayAdvanceMarkReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.subject.SubjectPayoffRegDao.findByRepayStatus" />
+        <property name="parameterValues">
+            <map>
+                <entry key="repayStatus" value="#{0}"/>
+            </map>
+        </property>
+    </bean>
+    <bean id="subjectRepayAdvanceMarkWriter" class="com.jiuyi.ndr.batch.subject.SubjectRepayAdvanceMarkWriter" scope="step"/>
+
+    <!--交易补偿-->
+    <bean id="lPlanTradeCompensateTasklet" class="com.jiuyi.ndr.batch.lplan.LPlanTradeCompensateTasklet"/>
+    <bean id="iPlanTradeCompensateTasklet" class="com.jiuyi.ndr.batch.iplan.IPlanTradeCompensateTasklet"/>
+    <!--债权转让补偿-->
+    <bean id="creditTransferCompensateTasklet" class="com.jiuyi.ndr.batch.credit.CreditTransferTasklet"/>
+
+    <!--购买补偿-->
+    <bean id="subjectTradeCompensateTasklet" class="com.jiuyi.ndr.batch.subject.SubjectTradeCompensateTasklet"/>
+
+    <!--债权撤消补偿-->
+    <bean id="creditCancelCompensateTasklet" class="com.jiuyi.ndr.batch.credit.CreditCancelTasklet"/>
+
+    <!--债权自动撤消-->
+    <bean id="creditAutoCancelTasklet" class="com.jiuyi.ndr.batch.credit.CreditAutoCancelTasklet"/>
+
+    <!--债权撤消批量-->
+    <bean id="creditCancelTimeTasklet" class="com.jiuyi.ndr.batch.credit.CreditCancelTimeTasklet"/>
+
+    <!--投资服务协议-->
+    <bean id="contractProduceReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory" />
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanAccountDao.findNoServiceContract" />
+    </bean>
+    <bean id="contractProduceWriter" class="com.jiuyi.ndr.batch.contract.ContractProduceWriter" scope="step"/>
+    <!--债权数据修正-->
+    <bean id="creditCorrectTasklet" class="com.jiuyi.ndr.batch.credit.CreditCorrectTasklet" scope="step"/>
+
+    <!--个人合同生成-->
+    <bean id="loanContractForUserTasklet" class="com.jiuyi.ndr.batch.contract.LoanContractForUserTasklet" scope="step"/>
+
+    <bean id="subjectRepayBonusTasklet" class="com.jiuyi.ndr.batch.subject.SubjectRepayBonusTasklet"/>
+    <!--月月盈还款派息条件判断-->
+    <bean id="iPlanRepayDecider" class="com.jiuyi.ndr.batch.listener.IPlanRepayDecider" />
+    <!--月月盈清退-->
+    <bean id="iPlanSettleReader" class="com.jiuyi.ndr.batch.MybatisSimpleExecutorReader" scope="step">
+        <property name="sqlSessionFactory" ref="sqlSessionFactory"/>
+        <property name="pageSize" value="10000"/>
+        <property name="queryId" value="com.jiuyi.ndr.dao.iplan.IPlanSettleDao.findIPlanSettleAccount"/>
+        <property name="parameterValues">
+            <map>
+                <entry key="date" value="#{new com.jiuyi.ndr.util.DateUtil().getCurrentDate()}"/>
+            </map>
+        </property>
+    </bean>
+
+    <batch:job id="baseJob" abstract="true">
+        <batch:listeners>
+            <batch:listener ref="jobStatusListener" />
+        </batch:listeners>
+    </batch:job>
+
+    <batch:job id="dailyJob" parent="baseJob">
+        <batch:step id="iPlanExitStep" next="iplanAutoInvestStep1">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanExitReader" writer="iPlanExitWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="iplanAutoInvestStep1" next="creditLoanStep1">
+            <batch:tasklet ref="iPlanAutoInvestTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="creditLoanStep1" next="creditLocalHandleStep1">
+            <batch:tasklet>
+                <batch:chunk reader="creditLoanReader" writer="creditLoanWriter" commit-interval="100"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--债权本地放款-->
+        <batch:step id="creditLocalHandleStep1" next="creditAutoCancelStep">
+            <batch:tasklet>
+                <batch:chunk reader="creditLocalLoanReader" writer="creditLocalLoanWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--自动撤消-->
+        <batch:step id="creditAutoCancelStep" next="creditCancelCompensateStep">
+            <batch:tasklet ref="creditAutoCancelTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--债权撤消补偿-->
+        <batch:step id="creditCancelCompensateStep" next="subjectTransLogExit1Step">
+            <batch:tasklet ref="creditCancelCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--transLog处理-->
+        <batch:step id="subjectTransLogExit1Step" next="subjectOverdueMarkStep">
+            <batch:tasklet>
+                <batch:chunk reader="subjectTranslLogExitReader" writer="subjectTransLogExitWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--逾期打标记-->
+        <batch:step id="subjectOverdueMarkStep" next="subjectOverduePenaltyStep">
+            <batch:tasklet>
+                <batch:chunk reader="unpaidRepayScheduleReader" writer="subjectOverdueMarkWriter" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--累加逾期罚息-->
+        <batch:step id="subjectOverduePenaltyStep" next="dayEndRepayDirect1ScheduleStep0">
+            <batch:tasklet>
+                <batch:chunk reader="overdueRepayScheduleReader" writer="subjectOverduePenaltyWriter" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--非直贷二还款计划打标记-->
+        <batch:step id="dayEndRepayDirect1ScheduleStep0" next="dayEndRepayDirect1ScheduleStep1">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep0Reader" writer="subjectRepayStep0Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--营销款打款以及冻结借款人账户厦门交易-->
+        <batch:step id="dayEndRepayDirect1ScheduleStep1" next="dayEndRepayDirect1ScheduleStep2">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep1Reader" writer="subjectRepayStep1Writer" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--本地营销款账户和借款人账户冻结和转出-->
+        <batch:step id="dayEndRepayDirect1ScheduleStep2" next="dayEndRepayDirect1ScheduleStep3">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep2Reader" writer="subjectRepayStep2Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--生成还款明细-->
+        <batch:step id="dayEndRepayDirect1ScheduleStep3" next="dayEndRepayDirect1DetailsStep1">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep3Reader" writer="subjectRepayStep3Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!-- 执行repay details -->
+        <batch:step id="dayEndRepayDirect1DetailsStep1" next="dayEndRepayDirect1DetailsStep2">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayReaderStep1" writer="subjectRepayWriterStep1" commit-interval="50"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--处理明细后本地用户数据处理-->
+        <batch:step id="dayEndRepayDirect1DetailsStep2" next="dayEndRepayDirect1DetailsStep3">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayReaderStep2" writer="subjectRepayWriterStep2" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--借款人本地账户从冻结中转出-->
+        <batch:step id="dayEndRepayDirect1DetailsStep3" next="subjectRepayBonusTaskletDirect1">
+            <batch:tasklet ref="subjectRepayDetailStep3Tasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayBonusTaskletDirect1" >
+            <batch:tasklet ref="subjectRepayBonusTasklet">
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <batch:job id="daytimeJob" parent="baseJob">
+        <!--厦门债权放款-->
+        <batch:step id="creditLoanStep" next="creditLocalHandleStep">
+            <batch:tasklet>
+                <batch:chunk reader="creditLoanReader" writer="creditLoanWriter" commit-interval="100"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--债权本地放款-->
+        <batch:step id="creditLocalHandleStep" next="iPlanTransLogExitStep">
+            <batch:tasklet>
+                <batch:chunk reader="creditLocalLoanReader" writer="creditLocalLoanWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--月月盈到期本金利息退出-->
+        <batch:step id="iPlanTransLogExitStep" next="iPlanSettleStep">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanTransLogExitReader" writer="iPlanTransLogExitWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="iPlanSettleStep" next="lPlanTradeCompensateStep1">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanSettleReader" writer="IPlanSettleWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="lPlanTradeCompensateStep1" next="iPlanCreditMergeStep">
+            <batch:tasklet ref="lPlanTradeCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+
+        <!-- 小债权合并 -->
+        <batch:step id="iPlanCreditMergeStep" next="subjectRepayDirect2Bill">
+            <batch:tasklet>
+                <batch:chunk reader="IPlanCreditMergeReader" writer="IPlanCreditMergeWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+
+        <!--直贷二信贷还款数据处理-->
+        <batch:step id="subjectRepayDirect2Bill" next="subjectRepayDirect2Mark">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayBillHandleReader" writer="subjectRepayBillHandleWriter" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayDirect2Mark" next="subjectRepayAdvanceMarks">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayDirect2MarkReader" writer="subjectRepayDirect2MarkWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayAdvanceMarks" next="subjectRepayStep0">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayAdvanceMarkReader" writer="subjectRepayAdvanceMarkWriter" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayStep0" next="subjectRepayStep1">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep0Reader" writer="subjectRepayStep0Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayStep1" next="subjectRepayDirect2OverdueAutoStep">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep1Reader" writer="subjectRepayStep1Writer" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayDirect2OverdueAutoStep" next="subjectRepayStep2">
+            <batch:tasklet ref="subjectRepayDirect2OverdueAutoTasklet">
+            </batch:tasklet>
+        </batch:step>
+
+        <batch:step id="subjectRepayStep2" next="subjectRepayStep3">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep2Reader" writer="subjectRepayStep2Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayStep3" next="subjectRepayDetailStep1">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayStep3Reader" writer="subjectRepayStep3Writer" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayDetailStep1" next="subjectRepayDetailStep2">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayReaderStep1" writer="subjectRepayWriterStep1" commit-interval="50"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayDetailStep2" next="subjectRepayDetailStep3">
+            <batch:tasklet>
+                <batch:chunk reader="subjectRepayReaderStep2" writer="subjectRepayWriterStep2" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayDetailStep3" next="subjectRepayBonusTasklet1">
+            <batch:tasklet ref="subjectRepayDetailStep3Tasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="subjectRepayBonusTasklet1" next="lPlanTradeCompensateStep">
+            <batch:tasklet ref="subjectRepayBonusTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="lPlanTradeCompensateStep" next="creditTransferCompensateStep">
+            <batch:tasklet ref="lPlanTradeCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="creditTransferCompensateStep" next="iPlanRepayDecision">
+            <batch:tasklet ref="creditTransferCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <batch:decision id="iPlanRepayDecision" decider="iPlanRepayDecider">
+            <batch:next on="FAILED" to="contractProduceStep" />
+            <batch:next on="COMPLETED" to="iPlanRepayStep" />
+        </batch:decision>
+        <batch:step id="iPlanRepayStep" next="contractProduceStep">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanRepayReader" writer="iPlanRepayWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <batch:step id="contractProduceStep">
+            <batch:tasklet>
+                <batch:chunk reader="contractProduceReader" writer="contractProduceWriter" commit-interval="1000"/>
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <batch:job id="contractJob" parent="baseJob">
+       <!-- &lt;!&ndash;省心投预约活动&ndash;&gt;
+        <batch:step id="newIplanAutoInvestStep" next="newIplanAutoMatchStep">
+            <batch:tasklet>
+                <batch:chunk reader="newIplanAutoInvestReader" writer="newIplanAutoInvestWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>-->
+        <!-- 省心投资金匹配 -->
+        <batch:step id="newIplanAutoMatchStep" next="iplanAutoInvestStep">
+            <batch:tasklet ref="newIPlanAutoMatchTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!-- 月月盈资金匹配 -->
+        <batch:step id="iplanAutoInvestStep" next="subjectTradeCompensateStep">
+            <batch:tasklet ref="iPlanAutoInvestTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--散标加入补偿-->
+        <batch:step id="subjectTradeCompensateStep" next="iplanTradeCompensateStep">
+            <batch:tasklet ref="subjectTradeCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--月月盈省心投加入补偿-->
+        <batch:step id="iplanTradeCompensateStep" next="creditCreateStep">
+            <batch:tasklet ref="iPlanTradeCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--散标债权生成-->
+        <batch:step id="creditCreateStep" next="subjectLendStep">
+            <batch:tasklet>
+                <batch:chunk reader="creditCreateReader" writer="creditCreateWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--标的放款-->
+        <batch:step id="subjectLendStep" next="subjectWithdrawStep">
+            <batch:tasklet>
+                <batch:chunk reader="subjectLendReader" writer="subjectLendWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--直贷二期借款人提现-->
+        <batch:step id="subjectWithdrawStep" next="iplanRaisedFinishStep">
+            <batch:tasklet>
+                <batch:chunk reader="subjectWithdrawReader" writer="subjectWithdrawWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--月月盈募集完成-->
+        <batch:step id="iplanRaisedFinishStep" next="creditCancelTimeTaskletStep">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanRaisedFinishReader" writer="iPlanRaisedFinishWriter" commit-interval="10"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--债权撤消批量-->
+        <batch:step id="creditCancelTimeTaskletStep" next="creditAutoCancel1Step">
+            <batch:tasklet ref="creditCancelTimeTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--自动撤消-->
+        <batch:step id="creditAutoCancel1Step" next="creditCancelCompensate1Step">
+            <batch:tasklet ref="creditAutoCancelTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--债权撤消补偿-->
+        <batch:step id="creditCancelCompensate1Step" next="subjectTransLogExitStep">
+            <batch:tasklet ref="creditCancelCompensateTasklet">
+            </batch:tasklet>
+        </batch:step>
+        <!--散标转让处理-->
+        <batch:step id="subjectTransLogExitStep" next="yjtTransLogExitStep">
+            <batch:tasklet>
+                <batch:chunk reader="subjectTranslLogExitReader" writer="subjectTransLogExitWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+        <!--一键投处理-->
+        <batch:step id="yjtTransLogExitStep">
+            <batch:tasklet>
+                <batch:chunk reader="iPlanTransLogCreditTransferExitReader" writer="iPlanTransLogCreditTransferExitWriter" commit-interval="1"/>
+            </batch:tasklet>
+        </batch:step>
+    </batch:job>
+
+    <bean id="batchScheduler" class="com.jiuyi.ndr.BatchScheduler" />
+    <bean id="myBatchScheduler" class="com.jiuyi.ndr.MyBatchScheduler"/>
+   <!-- <task:scheduler id="myBatchScheduler" pool-size="3"/>-->
+
+    <task:scheduled-tasks>
+        <!--每日00:01:00，日终批量-->
+        <!--<task:scheduled ref="batchScheduler" method="dayEndJob" cron="0 5 0 * * ?"/>-->
+
+       <!-- <task:scheduled ref="batchScheduler" method="dayEndRepayDirect1Job" cron="0 15 0,4 * * ?"/>-->
+        <!--定期日间批量-->
+        <task:scheduled ref="batchScheduler" method="daytimeJob" cron="0 0/15 6-23 * * ?"/>
+
+        <task:scheduled ref="batchScheduler" method="dailyJob" cron="0 5 0,3 * * ?"/>
+
+    </task:scheduled-tasks>
+    <task:scheduled-tasks>
+        <task:scheduled ref="myBatchScheduler" method="contractJob" cron="0 5/15 7-23 * * ?"/>
+    </task:scheduled-tasks>
+</beans>
